@@ -1,4 +1,4 @@
-# 🌐 Social Network
+﻿# 🌐 Social Network
 
 Dự án Mạng xã hội full-stack được xây dựng trên nền tảng **Next.js 15 App Router**, sử dụng hệ sinh thái công nghệ hiện đại, production-ready.
 
@@ -157,4 +157,4 @@ pnpm lint    # ESLint
 
 ## 📄 License
 
-MIT © 2026
+MIT © 2025
