@@ -1,10 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import CreatePostForm from "@/components/CreatePostForm";
 import PostCard, { PostData } from "@/components/PostCard";
-import { Loader2, Home, Search, Bell, User, Users, Bookmark, Settings, TrendingUp } from "lucide-react";
+import { Loader2, Home, Search, Bell, User, Users, Bookmark, Settings, TrendingUp, LogOut } from "lucide-react";
 import Link from "next/link";
 
 const fetchPosts = async (): Promise<{ posts: PostData[] }> => {
@@ -35,7 +35,14 @@ export default function HomePage() {
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["posts"],
-    queryFn: fetchPosts,
+    queryFn: async () => {
+      const res = await fetch("/api/posts");
+      if (!res.ok) throw new Error("Không thể tải bài viết");
+      return res.json() as Promise<{
+        posts: PostData[];
+        currentUserFollowing: string[];
+      }>;
+    },
     staleTime: 30 * 1000,
   });
 
@@ -78,14 +85,23 @@ export default function HomePage() {
 
           {/* User info at bottom */}
           {session?.user && (
-            <div className="mt-4 p-3 rounded-xl border border-white/8 flex items-center gap-3" style={{ background: "rgba(255,255,255,0.04)" }}>
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
-                {session.user.username?.[0]?.toUpperCase() ?? "U"}
+            <div className="mt-4 rounded-xl border border-white/8 overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
+              <div className="flex items-center gap-3 p-3">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                  {session.user.username?.[0]?.toUpperCase() ?? "U"}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-white text-sm font-medium truncate">@{session.user.username}</p>
+                  <p className="text-white/40 text-xs truncate">{session.user.email}</p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-white text-sm font-medium truncate">@{session.user.username}</p>
-                <p className="text-white/40 text-xs truncate">{session.user.email}</p>
-              </div>
+              <button
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-all border-t border-white/6"
+              >
+                <LogOut className="w-4 h-4" />
+                Đăng xuất
+              </button>
             </div>
           )}
         </aside>
@@ -141,7 +157,12 @@ export default function HomePage() {
 
             <div className="space-y-3">
               {data?.posts.map((post) => (
-                <PostCard key={post._id} post={post} />
+                <PostCard
+                  key={post._id}
+                  post={post}
+                  currentUserId={session?.user?.id}
+                  currentUserFollowing={data?.currentUserFollowing ?? []}
+                />
               ))}
             </div>
           </div>

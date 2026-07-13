@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";         // Auth.js v5 — dùng auth() trực tiếp
 import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
+import User from "@/models/User";
 
 // ─────────────────────────────────────────────────────────
 // GET /api/posts — Lấy danh sách bài viết (Newsfeed)
@@ -11,25 +12,41 @@ import Post from "@/models/Post";
 export async function GET() {
   try {
     await connectDB();
+    // Lấy session để biết user hiện tại
+    const session = await auth();
+    let feedUserIds: string[] = [];
+    if (session?.user?.id) {
+      // Tìm thông tin user hiện tại để lấy mảng following
+      const currentUser = await User.findById(session.user.id).select("following").lean();
+      if (currentUser) {
+        // Gộp: ID của chính mình + tất cả người đang follow
+        feedUserIds = [
+          session.user.id,
+          ...currentUser.following.map((id) => id.toString()),
+        ];
+      }
+    }
+    // Xây dựng query:
+    // - Đã follow ít nhất 1 người: $in lọc bài của người trong feedUserIds
+    // - Chưa follow ai: Discovery mode — hiện tất cả bài viết
+    const followingCount = feedUserIds.length - 1; // trừ chính mình
+    const query = followingCount > 0
+      ? { user: { $in: feedUserIds } }
+      : {};
 
-    const posts = await Post.find()
-      // populate: Thay ObjectId của user → document User thật
-      // Chỉ lấy 2 trường: username và avatar (tiết kiệm bandwidth)
+    const posts = await Post.find(query)
       .populate("user", "username avatar")
-      // Mới nhất lên trên (descending theo thời gian tạo)
       .sort({ createdAt: -1 })
-      // Giới hạn 20 bài mỗi lần (pagination cơ bản)
       .limit(20)
-      // Chuyển Mongoose document → plain JS object để JSON.stringify
       .lean();
 
-    return NextResponse.json({ posts }, { status: 200 });
+    return NextResponse.json({
+      posts,
+      currentUserFollowing: feedUserIds.slice(1),
+    });
   } catch (error) {
     console.error("[POSTS_GET_ERROR]", error);
-    return NextResponse.json(
-      { message: "Lỗi máy chủ" },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: "Lỗi máy chủ" }, { status: 500 });
   }
 }
 
@@ -52,23 +69,21 @@ export async function POST(req: NextRequest) {
     await connectDB();
 
     const body = await req.json();
-    const { content } = body;
+    const { content, images } = body; // nhận cả content lẫn mảng images URL
 
-    if (!content?.trim()) {
+    // Bài viết phải có ít nhất nội dung hoặc ảnh
+    if (!content?.trim() && (!images || images.length === 0)) {
       return NextResponse.json(
-        { message: "Nội dung bài viết không được trống" },
+        { message: "Bài viết phải có nội dung hoặc ảnh" },
         { status: 400 }
       );
     }
-
-    // Tạo bài mới, gắn userId từ session
     const newPost = await Post.create({
       user: session.user.id,
-      content: content.trim(),
-      images: [],
+      content: content?.trim() ?? "",
+      images: images ?? [],          // ← lưu mảng URL vào DB
       likes: [],
     });
-
     // Populate ngay sau khi tạo để trả về đầy đủ thông tin
     await newPost.populate("user", "username avatar");
 
