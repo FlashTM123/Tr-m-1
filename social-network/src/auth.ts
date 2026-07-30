@@ -43,7 +43,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }).select("+password");
 
           // Không tìm thấy user → trả null
-          if (!user) return null;
+          if (!user || !user.password) return null; // OAuth users không có password
 
           // ── Bước 3: So sánh password ──────────────────────────
           // bcrypt.compare(plain, hashed):
@@ -91,12 +91,52 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     // jwt callback: chạy khi tạo/cập nhật JWT token
     // "user" chỉ có mặt lần đầu tiên sau khi authorize() thành công
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
-        // Lần đầu đăng nhập: ghi thêm id và username vào token
-        // Những lần sau (refresh session), "user" là undefined → bỏ qua
-        token.id = user.id as string;
-        token.username = (user as { username: string }).username;
+        if (account?.provider === "credentials") {
+          // ── Credentials login: user.id là MongoDB ObjectId hợp lệ ─────────────────
+          token.id = user.id as string;
+          token.username = (user as { username: string }).username;
+        } else {
+          // ── OAuth login (Google/GitHub): user.id là provider ID, KHÔNG phải ObjectId ───
+          // Phải tìm hoặc tạo user trong MongoDB, sau đó lưu MongoDB _id vào token
+          try {
+            await connectDB();
+            let dbUser = await User.findOne({ email: user.email });
+
+            if (!dbUser) {
+              // Lần đầu đăng nhập bằng OAuth → tạo user mới trong MongoDB
+              const baseUsername = user.email!
+                .split("@")[0]
+                .replace(/[^a-zA-Z0-9_]/g, "_");
+              // Kiểm tra username trùng → thêm suffix nếu cần
+              let username = baseUsername;
+              const usernameExists = await User.findOne({ username });
+              if (usernameExists) {
+                username = `${baseUsername}_${Date.now().toString().slice(-6)}`;
+              }
+              dbUser = await User.create({
+                email: user.email!,
+                username,
+                avatar: user.image ?? "",
+                // Không có password — OAuth users không cần
+              });
+            } else if (!dbUser.avatar && user.image) {
+              // Cập nhật avatar nếu chưa có
+              dbUser.avatar = user.image;
+              await dbUser.save();
+            }
+
+            token.id = dbUser._id.toString(); // ← Đây mới là MongoDB ObjectId hợp lệ
+            token.username = dbUser.username;
+          } catch (e) {
+            console.error("[JWT_OAUTH_DB_ERROR]", e);
+            // Fallback: giữ lại provider ID (sẽ gây 500 ở routes nhưng không crash auth)
+            token.id = user.id as string;
+            token.username =
+              user.name?.split(" ")[0] ?? user.email?.split("@")[0] ?? "user";
+          }
+        }
       }
       return token;
     },

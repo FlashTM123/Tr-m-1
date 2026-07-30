@@ -5,6 +5,7 @@ import { auth } from "@/auth";         // Auth.js v5 — dùng auth() trực ti�
 import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
 import User from "@/models/User";
+import mongoose from "mongoose";
 
 // ─────────────────────────────────────────────────────────
 // GET /api/posts — Lấy danh sách bài viết (Newsfeed)
@@ -15,7 +16,7 @@ export async function GET() {
     // Lấy session để biết user hiện tại
     const session = await auth();
     let feedUserIds: string[] = [];
-    if (session?.user?.id) {
+    if (session?.user?.id && mongoose.isValidObjectId(session.user.id)) {
       // Tìm thông tin user hiện tại để lấy mảng following
       const currentUser = await User.findById(session.user.id).select("following").lean();
       if (currentUser) {
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
     // Nếu chưa đăng nhập → session = null
     const session = await auth();
 
-    if (!session?.user?.id) {
+    if (!session?.user?.id || !mongoose.isValidObjectId(session.user.id)) {
       return NextResponse.json(
         { message: "Bạn cần đăng nhập để đăng bài" },
         { status: 401 }

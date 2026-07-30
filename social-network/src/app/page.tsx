@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useSession, signOut } from "next-auth/react";
 import CreatePostForm from "@/components/CreatePostForm";
 import PostCard, { PostData } from "@/components/PostCard";
-import { Loader2, Home, Search, Bell, User, Users, Bookmark, Settings, TrendingUp, LogOut } from "lucide-react";
+import StoryBar from "@/components/StoryBar";
+import { Loader2, Home, Search, Bell, User, Users, Bookmark, Settings, TrendingUp, LogOut, LogIn, UserPlus } from "lucide-react";
 import Link from "next/link";
 
 const fetchPosts = async (): Promise<{ posts: PostData[] }> => {
@@ -70,21 +71,26 @@ export default function HomePage() {
 
           {/* Nav items */}
           <nav className="flex-1 space-y-1">
-            {navItems.map(({ icon: Icon, label, href, active }) => (
-              <Link key={href} href={href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${active
-                  ? "bg-purple-600/20 text-purple-400"
-                  : "text-white/50 hover:text-white hover:bg-white/6"
-                  }`}>
-                <Icon className={`w-5 h-5 transition-transform group-hover:scale-110 ${active ? "text-purple-400" : ""}`} />
-                {label}
-                {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-400" />}
-              </Link>
-            ))}
+            {navItems.map(({ icon: Icon, label, href, active }) => {
+              const targetHref = label === "Trang cá nhân" && session?.user?.username
+                ? `/user/${session.user.username}`
+                : href;
+              return (
+                <Link key={label} href={targetHref}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${active
+                    ? "bg-purple-600/20 text-purple-400"
+                    : "text-white/50 hover:text-white hover:bg-white/6"
+                    }`}>
+                  <Icon className={`w-5 h-5 transition-transform group-hover:scale-110 ${active ? "text-purple-400" : ""}`} />
+                  {label}
+                  {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-400" />}
+                </Link>
+              );
+            })}
           </nav>
 
-          {/* User info at bottom */}
-          {session?.user && (
+          {/* User info or Login/Register */}
+          {session?.user ? (
             <div className="mt-4 rounded-xl border border-white/8 overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
               <div className="flex items-center gap-3 p-3">
                 <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
@@ -103,6 +109,30 @@ export default function HomePage() {
                 Đăng xuất
               </button>
             </div>
+          ) : (
+            /* Chưa đăng nhập — hiện nút đăng nhập / đăng ký */
+            <div className="mt-4 rounded-xl border border-purple-500/20 overflow-hidden" style={{ background: "rgba(139,92,246,0.06)" }}>
+              <div className="px-3 pt-3 pb-2">
+                <p className="text-white/70 text-xs font-medium mb-1">Tham gia cộng đồng</p>
+                <p className="text-white/30 text-xs">Đăng nhập để đăng bài, like và follow bạn bè</p>
+              </div>
+              <div className="p-3 pt-1 flex flex-col gap-2">
+                <Link
+                  href="/login"
+                  className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-all"
+                >
+                  <LogIn className="w-4 h-4" />
+                  Đăng nhập
+                </Link>
+                <Link
+                  href="/register"
+                  className="flex items-center justify-center gap-2 w-full py-2 rounded-lg border border-white/15 hover:bg-white/6 text-white/70 hover:text-white text-sm font-medium transition-all"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Đăng ký
+                </Link>
+              </div>
+            </div>
           )}
         </aside>
 
@@ -114,6 +144,9 @@ export default function HomePage() {
               <h1 className="text-xl font-bold text-white">Bảng tin</h1>
               <p className="text-white/40 text-xs mt-0.5">Cập nhật mới nhất từ cộng đồng</p>
             </div>
+
+            {/* Story Bar */}
+            <StoryBar />
 
             {/* Create post */}
             <CreatePostForm />
@@ -130,6 +163,22 @@ export default function HomePage() {
                 </button>
               ))}
             </div>
+
+            {/* Feed prompt for unauthenticated users */}
+            {!session && (
+              <div className="flex items-center gap-3 mb-4 px-4 py-3 rounded-xl border border-purple-500/25" style={{ background: "rgba(139,92,246,0.08)" }}>
+                <div className="w-8 h-8 rounded-lg bg-purple-600/30 flex items-center justify-center shrink-0">
+                  <UserPlus className="w-4 h-4 text-purple-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white/80 text-xs font-medium">Đăng nhập để tương tác</p>
+                  <p className="text-white/40 text-xs">Like, comment và follow mọi người</p>
+                </div>
+                <Link href="/login" className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-all shrink-0">
+                  Đăng nhập
+                </Link>
+              </div>
+            )}
 
             {/* Posts */}
             {isLoading && (

@@ -4,11 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
+import mongoose from "mongoose";
 
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user?.id) {
+    if (!session?.user?.id || !mongoose.isValidObjectId(session.user.id)) {
       return NextResponse.json({ message: "Chưa đăng nhập" }, { status: 401 });
     }
 

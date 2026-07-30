@@ -8,6 +8,7 @@ import FollowButton from "./FollowButton";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import Link from "next/link";
 // Thêm vào đầu file PostCard.tsx (sau các import)
 
 export interface CommentData {
@@ -147,27 +148,27 @@ export default function PostCard({ post, currentUserId, currentUserFollowing }: 
     <div className="rounded-2xl border border-white/10 p-5 mb-3 transition-all hover:border-white/20" style={{ background: "rgba(255,255,255,0.04)" }}>
       {/* Header: Avatar + tên + thời gian */}
       <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
+        <Link href={`/user/${post.user.username}`} className="flex items-center gap-3 group">
           {/* Avatar: hiện ảnh nếu có, ngược lại dùng chữ đầu */}
           {post.user.avatar ? (
             <img
               src={post.user.avatar}
               alt={post.user.username}
-              className="w-10 h-10 rounded-full object-cover"
+              className="w-10 h-10 rounded-full object-cover group-hover:opacity-90 transition-opacity"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm group-hover:opacity-90 transition-opacity">
               {post.user.username?.[0]?.toUpperCase()}
             </div>
           )}
 
           <div>
-            <p className="text-white font-semibold text-sm">
+            <p className="text-white font-semibold text-sm group-hover:text-purple-300 transition-colors">
               @{post.user.username}
             </p>
             <p className="text-white/40 text-xs">{timeAgo}</p>
           </div>
-        </div>
+        </Link>
         {currentUserId && post.user._id !== currentUserId && (
           <FollowButton
             targetUserId={post.user._id}

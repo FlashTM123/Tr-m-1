@@ -46,6 +46,7 @@ export async function connectDB(): Promise<Mongoose> {
     const opts = {
       bufferCommands: false, // Không buffer lệnh khi chưa kết nối — phát hiện lỗi sớm hơn
       family: 4,             // Ép dùng IPv4 — fix lỗi ECONNREFUSED khi Node.js resolve SRV qua IPv6 trên Windows
+      dbName: "social_network_db", // ← Chỉ định đúng database, tránh dùng "test" mặc định
     };
 
     cached.promise = mongoose.connect(MONGODB_URI, opts);

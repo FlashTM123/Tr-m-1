@@ -12,7 +12,7 @@ export interface IPost extends Document {
 const postSchema = new Schema<IPost>(
     {
         user: { type: Schema.Types.ObjectId, ref: "User", required: true },
-        content: { type: String, required: [true, "Nội dung không được để trống"], maxlength: [2000, "Nội dung không được vượt quá 2000 ký tự"], trim: true },
+        content: { type: String, default: "", maxlength: [2000, "Nội dung không được vượt quá 2000 ký tự"], trim: true }, // Không required — cho phép post chỉ có ảnh
         images: { type: [String], default: [] },   // đổi từ image → images
         likes:{ type: [Schema.Types.ObjectId], ref: "User" },
     },

@@ -11,6 +11,7 @@ export interface IUser extends Document {
   email: string;
   password: string;
   avatar: string;
+  bio: string;
   followers: Types.ObjectId[];  // Mảng ID những người THEO DÕI mình
   following: Types.ObjectId[];  // Mảng ID những người MÌNH THEO DÕI
   createdAt: Date;
@@ -39,12 +40,17 @@ const UserSchema = new Schema<IUser>(
     },
     password: {
       type: String,
-      required: [true, "Password là bắt buộc"],
       minlength: [6, "Password phải có ít nhất 6 ký tự"],
+      // Không required — OAuth users (Google/GitHub) không có password
     },
     avatar: {
       type: String,
-      default: "",        // Mặc định chưa có avatar
+      default: "",
+    },
+    bio: {
+      type: String,
+      default: "",
+      maxlength: [160, "Bio tối đa 160 ký tự"],
     },
     followers: [
       {
