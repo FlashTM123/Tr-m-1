@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
+import Notification from "@/models/Notification";
+import { sendSSENotification } from "@/lib/sse";
 import mongoose from "mongoose";
 
 export async function POST(req: NextRequest) {
@@ -35,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     // Kiểm tra đã follow chưa bằng cách tìm targetUserId trong mảng following
     const isAlreadyFollowing = currentUser.following.some(
-      (id) => id.toString() === targetUserId
+      (id: { toString(): string }) => id.toString() === targetUserId
     );
 
     if (isAlreadyFollowing) {
@@ -63,6 +65,25 @@ export async function POST(req: NextRequest) {
 
       await User.findByIdAndUpdate(targetUserId, {
         $addToSet: { followers: session.user.id },
+      });
+
+      // Thông báo follow
+      await Notification.findOneAndUpdate(
+        { recipient: targetUserId, sender: session.user.id, type: "follow" },
+        { recipient: targetUserId, sender: session.user.id, type: "follow", read: false },
+        { upsert: true }
+      );
+
+      // Push SSE real-time
+      sendSSENotification(targetUserId, {
+        type: "follow",
+        sender: {
+          _id: session.user.id,
+          username: currentUser.username,
+          avatar: currentUser.avatar,
+        },
+        read: false,
+        createdAt: new Date().toISOString(),
       });
 
       return NextResponse.json({

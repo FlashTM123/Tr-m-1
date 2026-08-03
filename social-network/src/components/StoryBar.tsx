@@ -20,7 +20,7 @@ export interface StoryData {
   createdAt: string;
 }
 
-interface GroupedStories {
+export interface GroupedStories {
   user: StoryData["user"];
   stories: StoryData[];
   hasUnviewed: boolean;
@@ -64,7 +64,7 @@ export default function StoryBar() {
 
   // Upload to UploadThing
   const { startUpload, isUploading } = useUploadThing("storyUploader", {
-    onUploadError: (err) => toast.error(`Upload thất bại: ${err.message}`),
+    onUploadError: (err) => { toast.error(`Upload thất bại: ${err.message}`); },
   });
 
   // Create story mutation

@@ -152,7 +152,7 @@ export default function StoryViewer({
 
         {/* ── Progress bars ── */}
         <div className="absolute top-0 left-0 right-0 z-20 flex gap-1 px-3 pt-3">
-          {currentGroup.stories.map((s, i) => (
+          {currentGroup.stories.map((s: StoryData, i: number) => (
             <div key={s._id} className="flex-1 h-[3px] rounded-full bg-white/25 overflow-hidden">
               <div
                 className="h-full bg-white rounded-full transition-none"

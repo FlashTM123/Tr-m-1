@@ -14,6 +14,7 @@ Dự án Mạng xã hội full-stack được xây dựng trên nền tảng **N
 | **Database** | [MongoDB Atlas](https://www.mongodb.com/atlas) + [Mongoose](https://mongoosejs.com) |
 | **Auth** | [Auth.js v5](https://authjs.dev) (Credentials, GitHub OAuth, Google OAuth) |
 | **Data Fetching** | [TanStack React Query v5](https://tanstack.com/query) |
+| **Real-time** | Server-Sent Events (SSE) + EventSource Stream |
 | **File Upload** | [Uploadthing](https://uploadthing.com) (Multi-image, Video, Media Cloud Storage) |
 | **Password Hashing** | [bcryptjs](https://github.com/dcodeIO/bcrypt.js) |
 | **Form Validation** | [react-hook-form](https://react-hook-form.com) + [Zod](https://zod.dev) |
@@ -23,19 +24,24 @@ Dự án Mạng xã hội full-stack được xây dựng trên nền tảng **N
 
 ## ✨ Feature Highlights
 
-- 🔐 **Xác thực đa phương thức**: Đăng nhập bằng Email/Password hoặc GitHub/Google OAuth 1-click. Tự động sync MongoDB User.
-- 📰 **Bảng tin cá nhân hóa (Newsfeed)**: Lọc bài viết theo danh sách người theo dõi (Following), hỗ trợ Discovery mode cho người dùng mới.
+- 🔐 **Xác thực đa phương thức**: Đăng nhập bằng Email/Password hoặc GitHub/Google OAuth. Middleware bảo vệ private routes.
+- ⚡ **Thông báo Real-time (Server-Sent Events)**:
+  - Tự động nhận thông báo khi có ai Thích, Bình luận hoặc Theo dõi bạn không cần F5.
+  - Toast popup hiển thị tức thì toàn ứng dụng kèm badge đếm số thông báo chưa đọc.
+  - Tự động kết nối lại (Exponential backoff) & Heartbeat giữ kết nối 25s.
+- 📰 **Bảng tin cá nhân hóa (Newsfeed)**: Tab "Dành cho bạn" & Tab "Đang theo dõi", hỗ trợ gợi ý theo dõi thông minh từ DB.
 - 📝 **Đăng bài viết & Media**: Hỗ trợ đăng văn bản kèm nhiều ảnh từ UploadThing Cloud.
-- ❤️ **Like & Comment (Optimistic UI)**: Phản hồi tức thì không cần chờ server response.
-- 👥 **Hệ thống Follow / Unfollow**: Theo dõi 2 chiều với nút bấm Optimistic Update.
-- 📖 **Story 24h (Tích hợp Media/Video)**:
+- ❤️ **Like & Comment (Optimistic UI)**: Phản hồi tức thì không chờ server response.
+- 🔖 **Lưu bài viết (Bookmarks)**: Lưu bài viết yêu thích và xem lại tại trang `/saved` dạng lưới Instagram.
+- 🔍 **Tìm kiếm người dùng (`/search`)**: Tìm kiếm theo Username với debounce 350ms & thao tác follow trực tiếp.
+- ⚙️ **Cài đặt hồ sơ (`/settings`)**: Đổi avatar (UploadThing), cập nhật Bio & Username.
+- 👥 **Quản lý Bạn bè (`/friends`)**: Danh sách Người theo dõi (Followers) & Đang theo dõi (Following).
+- 📄 **Chi tiết bài viết (`/post/[postId]`)**: Xem chi tiết bài viết kèm Carousel chuyển ảnh & bình luận.
+- 📖 **Story 24h (Media/Video)**:
   - Thanh Story ngang phía trên Bảng tin với nút tạo nhanh.
-  - Hỗ trợ Upload cả Ảnh (tối đa 32MB) và Video (tối đa 64MB).
-  - Trình xem Story toàn màn hình (Full-screen Viewer) kèm thanh tiến trình tự động (Progress bars), phím điều hướng `←`/`→`, giữ chuột để tạm dừng.
+  - Full-screen Viewer với thanh tiến trình tự động, tạm dừng khi giữ chuột.
   - Tự động xóa khỏi Database sau 24h nhờ **MongoDB TTL Index**.
-- 👤 **Trang cá nhân (`/user/[username]`)**:
-  - Giao diện thiết kế gối viền hiện đại, hiển thị Bio, thống kê bài viết/followers/following.
-  - Lưới bài viết 3 cột chuẩn Instagram kèm modal xem chi tiết.
+- 👤 **Trang cá nhân (`/user/[username]`)**: Bio, thống kê bài viết/followers/following, lưới bài viết 3 cột.
 
 ---
 
@@ -49,35 +55,58 @@ social-network/
 │   │   │   ├── auth/[...nextauth]/route.ts   # Auth.js handler
 │   │   │   ├── auth/register/route.ts        # API Đăng ký
 │   │   │   ├── posts/route.ts                # API Bài viết (GET feed / POST)
-│   │   │   ├── posts/[postId]/like/route.ts  # Toggle like (Optimistic)
-│   │   │   ├── posts/[postId]/comments/route.ts # API Bình luận
+│   │   │   ├── posts/[postId]/route.ts       # API Chi tiết bài viết
+│   │   │   ├── posts/[postId]/like/route.ts  # Toggle like + trigger SSE
+│   │   │   ├── posts/[postId]/comments/route.ts # API Bình luận + trigger SSE
+│   │   │   ├── posts/[postId]/bookmark/route.ts # API Toggle bookmark
+│   │   │   ├── notifications/route.ts        # API Danh sách thông báo
+│   │   │   ├── notifications/stream/route.ts # SSE Real-time Stream endpoint
+│   │   │   ├── search/route.ts               # API Tìm kiếm user
+│   │   │   ├── settings/route.ts             # API Cập nhật profile
 │   │   │   ├── stories/route.ts              # API Stories (GET active / POST)
 │   │   │   ├── stories/[storyId]/route.ts    # API Story DELETE & view count
 │   │   │   ├── user/[username]/route.ts      # API Profile & User posts
-│   │   │   ├── follow/route.ts               # API Follow / Unfollow
+│   │   │   ├── user/bookmarks/route.ts       # API Lấy bài viết đã lưu
+│   │   │   ├── user/friends/route.ts         # API Lấy danh sách followers/following
+│   │   │   ├── user/suggestions/route.ts     # API Gợi ý theo dõi
+│   │   │   ├── follow/route.ts               # API Follow / Unfollow + trigger SSE
 │   │   │   └── uploadthing/route.ts          # Handler Uploadthing Media
+│   │   ├── friends/page.tsx                  # Trang bạn bè (Followers/Following)
+│   │   ├── notifications/page.tsx            # Trang thông báo
+│   │   ├── post/[postId]/page.tsx            # Trang chi tiết bài viết
+│   │   ├── saved/page.tsx                    # Trang bài viết đã lưu
+│   │   ├── search/page.tsx                   # Trang tìm kiếm
+│   │   ├── settings/page.tsx                 # Trang cài đặt hồ sơ
 │   │   ├── user/[username]/page.tsx          # Trang cá nhân
 │   │   ├── login/page.tsx                    # Trang Đăng nhập
 │   │   ├── register/page.tsx                 # Trang Đăng ký
-│   │   ├── layout.tsx
-│   │   └── page.tsx                          # Trang chủ (Newsfeed + StoryBar)
-│   ├── auth.ts                               # Auth.js configuration
+│   │   ├── layout.tsx                        # Root layout
+│   │   └── page.tsx                          # Trang chủ (Newsfeed + Sidebar)
+│   ├── auth.ts                               # Auth.js Node.js runtime config
+│   ├── auth.config.ts                        # Auth.js Edge-safe config (dùng cho middleware)
+│   ├── middleware.ts                         # Edge Route protection
 │   ├── components/
 │   │   ├── CreatePostForm.tsx
 │   │   ├── PostCard.tsx
-│   │   ├── FollowButton.tsx
-│   │   ├── StoryBar.tsx                      # Thanh hiển thị Story
-│   │   ├── StoryViewer.tsx                   # Modal phát Story full-screen
+│   │   ├── StoryBar.tsx
+│   │   ├── StoryViewer.tsx
+│   │   ├── SSEProvider.tsx                   # Client-side SSE mount point
 │   │   └── providers.tsx
+│   ├── hooks/
+│   │   └── useSSENotifications.ts            # Custom hook quản lý kết nối EventSource SSE
 │   ├── lib/
 │   │   ├── db.ts                             # Connection Mongoose Singleton
+│   │   ├── sse.ts                            # SSE Connection Manager (Global Map)
 │   │   └── uploadthing.ts
-│   └── models/
-│       ├── User.ts
-│       ├── Post.ts
-│       ├── Comment.ts
-│       └── Story.ts                          # Schema Story 24h
-├── .env.example
+│   ├── models/
+│   │   ├── User.ts                           # Added bookmarks array
+│   │   ├── Post.ts
+│   │   ├── Comment.ts
+│   │   ├── Story.ts
+│   │   └── Notification.ts                   # Schema Notification
+│   └── types/
+│       └── notification.ts                   # Shared notification types
+├── .env
 ├── next.config.ts
 └── tsconfig.json
 ```
@@ -113,6 +142,7 @@ AUTH_GITHUB_SECRET=your_github_secret
 AUTH_GOOGLE_ID=your_google_id
 AUTH_GOOGLE_SECRET=your_google_secret
 NEXTAUTH_URL=http://localhost:3000
+AUTH_TRUST_HOST=true
 UPLOADTHING_TOKEN=your_uploadthing_token
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
@@ -125,25 +155,35 @@ pnpm dev
 
 Mở trình duyệt tại [http://localhost:3000](http://localhost:3000).
 
+### 4. Build & Chạy Production
+
+```bash
+pnpm build
+pnpm start
+```
+
 ---
 
-## 📡 API Endpoints
+## 📡 API Endpoints chính
 
 | Method | Endpoint | Mô tả | Auth |
 |---|---|---|---|
 | POST | `/api/auth/register` | Đăng ký tài khoản | ❌ |
-| GET | `/api/posts` | Newsfeed (lọc theo following) | ❌ |
+| GET | `/api/posts` | Newsfeed (lọc theo query `?feed=following`) | ❌ |
 | POST | `/api/posts` | Tạo bài viết mới | ✅ |
-| POST | `/api/posts/:id/like` | Toggle thích / bỏ thích | ✅ |
-| GET | `/api/posts/:id/comments` | Lấy danh sách bình luận | ❌ |
-| POST | `/api/posts/:id/comments` | Bình luận bài viết | ✅ |
-| GET | `/api/stories` | Lấy danh sách Story chưa hết hạn | ❌ |
-| POST | `/api/stories` | Tạo Story mới (ảnh / video) | ✅ |
-| DELETE | `/api/stories/:id` | Xóa Story của chính mình | ✅ |
-| PATCH | `/api/stories/:id` | Đánh dấu đã xem Story | ✅ |
-| GET | `/api/user/:username` | Lấy thông tin profile & bài viết của user | ❌ |
-| POST | `/api/follow` | Follow / Unfollow người dùng | ✅ |
-| GET/POST | `/api/uploadthing` | Handler Upload media | ✅ |
+| GET/POST | `/api/posts/:id` | Lấy chi tiết bài viết | ❌ |
+| POST | `/api/posts/:id/like` | Toggle thích / bỏ thích (trigger SSE) | ✅ |
+| POST | `/api/posts/:id/bookmark` | Toggle lưu bài viết | ✅ |
+| GET/POST | `/api/posts/:id/comments` | Lấy & Tạo bình luận (trigger SSE) | ✅ |
+| GET | `/api/notifications` | Lấy danh sách thông báo | ✅ |
+| GET | `/api/notifications/stream` | Server-Sent Events (SSE) Stream | ✅ |
+| PATCH | `/api/notifications` | Đánh dấu tất cả thông báo là đã đọc | ✅ |
+| GET | `/api/search` | Tìm kiếm người dùng | ❌ |
+| GET/PUT | `/api/settings` | Lấy & Cập nhật thông tin profile | ✅ |
+| GET | `/api/user/bookmarks` | Lấy danh sách bài viết đã lưu | ✅ |
+| GET | `/api/user/friends` | Lấy danh sách Followers / Following | ✅ |
+| GET | `/api/user/suggestions` | Gợi ý người dùng theo dõi | ✅ |
+| POST | `/api/follow` | Follow / Unfollow người dùng (trigger SSE) | ✅ |
 
 ---
 
@@ -152,6 +192,7 @@ Mở trình duyệt tại [http://localhost:3000](http://localhost:3000).
 ```bash
 pnpm dev     # Dev server (Turbopack)
 pnpm build   # Production build
+pnpm start   # Production server
 pnpm lint    # ESLint check
 ```
 
@@ -162,18 +203,21 @@ pnpm lint    # ESLint check
 ### ✅ Hoàn thành
 
 - [x] Next.js 15 App Router + TypeScript + Tailwind v4 + Shadcn/ui
-- [x] MongoDB Atlas (Mongoose Singleton, fix connection caching & IPv4)
-- [x] Auth.js v5 — Credentials + GitHub + Google OAuth (OAuth User Auto-Sync)
-- [x] UI Đăng ký / Đăng nhập (Zod + react-hook-form)
-- [x] Schema Mongoose: User, Post, Comment, Story
+- [x] MongoDB Atlas (Mongoose Singleton)
+- [x] Auth.js v5 — Credentials + GitHub + Google OAuth (Edge-safe config)
+- [x] Middleware Route Protection & Auth Guard
 - [x] Uploadthing — upload media cloud (ảnh bài viết, avatar, story video/ảnh)
-- [x] Newsfeed cá nhân hóa (lọc theo following & Discovery mode)
-- [x] CreatePostForm (Multi-image preview & upload)
-- [x] PostCard (Optimistic like, Comment section, relative date)
-- [x] TanStack React Query (Cache + Invalidation + Optimistic UI)
+- [x] Newsfeed cá nhân hóa (lọc theo Following & Discovery mode)
+- [x] PostCard (Optimistic like, Bookmark button, Comment count, relative date)
+- [x] Thông báo Real-time bằng Server-Sent Events (SSE) Stream
+- [x] Trang Tìm kiếm (`/search`) với debounce
+- [x] Trang Cài đặt hồ sơ (`/settings`)
+- [x] Trang Chi tiết bài viết (`/post/[postId]`)
+- [x] Trang Bài viết đã lưu (`/saved`)
+- [x] Trang Bạn bè (`/friends`)
 - [x] System Follow / Unfollow (2 chiều)
-- [x] Trang Profile (`/user/[username]`) — Bio, Grid bài viết 3 cột, Modal preview
-- [x] Tính năng Story 24h — Thanh StoryBar, Full-screen Viewer, Progress bars, Video/Image support, 24h Auto-expire (TTL index)
+- [x] Trang Profile (`/user/[username]`)
+- [x] Tính năng Story 24h (Video/Image support, TTL index auto-expire)
 
 ---
 

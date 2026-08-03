@@ -3,13 +3,12 @@
 
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
-import { Heart, MessageCircle, Share2, MoreHorizontal } from "lucide-react";
+import { Heart, MessageCircle, Share2, MoreHorizontal, Bookmark } from "lucide-react";
 import FollowButton from "./FollowButton";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import Link from "next/link";
-// Thêm vào đầu file PostCard.tsx (sau các import)
 
 export interface CommentData {
   _id: string;
@@ -41,13 +40,17 @@ interface PostCardProps {
   post: PostData;
   currentUserId?: string; // ID của người dùng hiện tại (nếu đã đăng nhập)
   currentUserFollowing?: string[]; // Danh sách ID người dùng mà currentUser đang follow  
+  bookmarkedPostIds?: string[]; // Danh sách ID bài viết đã bookmark
 }
 
-export default function PostCard({ post, currentUserId, currentUserFollowing }: PostCardProps) {
+export default function PostCard({ post, currentUserId, currentUserFollowing, bookmarkedPostIds }: PostCardProps) {
   // formatDistanceToNow: "5 phút trước", "2 giờ trước", "3 ngày trước"
   const [showComments, setShowComments] = useState(false);
   const [commentInput, setCommentInput] = useState("");
   const queryClient = useQueryClient();
+  const [isBookmarked, setIsBookmarked] = useState(
+    () => bookmarkedPostIds?.includes(post._id) ?? false
+  );
   // Thêm sau khai báo state, trong component PostCard
 
   // ── LIKE MUTATION với Optimistic Updates ────────────────────────────────
@@ -100,6 +103,26 @@ export default function PostCard({ post, currentUserId, currentUserFollowing }: 
     // onSettled: Luôn chạy sau cùng — đồng bộ lại với server
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+  });
+
+  // ── BOOKMARK MUTATION ────────────────────────────────────────────────────
+  const { mutate: toggleBookmark } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/posts/${post._id}/bookmark`, { method: "POST" });
+      if (!res.ok) throw new Error("Thao tác thất bại");
+      return res.json();
+    },
+    onMutate: () => {
+      setIsBookmarked((prev) => !prev);
+    },
+    onSuccess: (result) => {
+      setIsBookmarked(result.isBookmarked);
+      toast.success(result.isBookmarked ? "Đã lưu bài viết 🔖" : "Đã bỏ lưu");
+    },
+    onError: () => {
+      setIsBookmarked((prev) => !prev); // rollback
+      toast.error("Thao tác thất bại");
     },
   });
   // Comment query — chỉ fetch khi showComments = true
@@ -242,20 +265,42 @@ export default function PostCard({ post, currentUserId, currentUserFollowing }: 
         {/* Comment */}
         <button
           onClick={() => setShowComments((prev) => !prev)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all group ${showComments
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all group ${
+            showComments
               ? "text-blue-400 bg-blue-500/10"
               : "text-white/50 hover:text-blue-400 hover:bg-blue-500/10"
-            }`}
+          }`}
         >
           <MessageCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
+          {commentsData?.comments?.length ? (
+            <span>{commentsData.comments.length}</span>
+          ) : null}
           <span>Bình luận</span>
         </button>
 
         {/* Share */}
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white/50 hover:text-green-400 hover:bg-green-500/10 text-xs transition-all group ml-auto">
+        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white/50 hover:text-green-400 hover:bg-green-500/10 text-xs transition-all group">
           <Share2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
           <span>Chia sẻ</span>
         </button>
+
+        {/* Bookmark */}
+        {currentUserId && (
+          <button
+            onClick={() => toggleBookmark()}
+            className={`ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all group ${
+              isBookmarked
+                ? "text-purple-400 bg-purple-500/10"
+                : "text-white/50 hover:text-purple-400 hover:bg-purple-500/10"
+            }`}
+          >
+            <Bookmark
+              className={`w-4 h-4 group-hover:scale-110 transition-transform ${
+                isBookmarked ? "fill-purple-400" : ""
+              }`}
+            />
+          </button>
+        )}
       </div>
       {/* 💬 Comment Section — xổ xuống khi click */}
       {showComments && (

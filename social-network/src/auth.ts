@@ -1,105 +1,76 @@
 // src/auth.ts
+// File này chạy trên Node.js runtime — có thể dùng bcryptjs, mongoose, v.v.
+// KHÔNG được import từ file này trong middleware.ts
 
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import GitHub from "next-auth/providers/github";
-import Google from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import User from "@/models/User";
+import authConfig from "./auth.config";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  // ── PROVIDERS ──────────────────────────────────────────────────────────
+  // Kế thừa toàn bộ config edge-safe (OAuth providers, session strategy, callbacks cơ bản)
+  ...authConfig,
+
+  // Thêm Credentials provider — chỉ hoạt động trong Node.js runtime
   providers: [
-    // --- Provider 1: Credentials (Email + Password tự chế) ---
+    ...authConfig.providers,
     Credentials({
       name: "Credentials",
 
-      // "credentials" khai báo shape của form login
-      // Auth.js dùng để auto-generate form mặc định (nếu cần)
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
 
-      // authorize() là trái tim — chạy mỗi khi user đăng nhập
-      // Trả về User object → đăng nhập thành công
-      // Trả về null → đăng nhập thất bại
+      // authorize() cần bcryptjs + mongoose → chỉ chạy được trong Node.js runtime
       async authorize(credentials) {
-        // Guard: kiểm tra credentials có đủ không
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
 
         try {
-          // ── Bước 1: Kết nối DB ────────────────────────────────
           await connectDB();
 
-          // ── Bước 2: Tìm user theo email (lowercase) ──────────
-          // .select("+password"): Mongoose mặc định có thể ẩn password
-          // nên cần select rõ ràng để lấy ra khi so sánh
           const user = await User.findOne({
             email: (credentials.email as string).toLowerCase(),
           }).select("+password");
 
-          // Không tìm thấy user → trả null
-          if (!user || !user.password) return null; // OAuth users không có password
+          if (!user || !user.password) return null;
 
-          // ── Bước 3: So sánh password ──────────────────────────
-          // bcrypt.compare(plain, hashed):
-          //   - "plain" = password người dùng vừa gõ
-          //   - "hashed" = $2b$12$... đã lưu trong DB
-          // Trả về true nếu khớp, false nếu không
           const isPasswordValid = await bcrypt.compare(
             credentials.password as string,
             user.password
           );
 
-          // Password sai → trả null
           if (!isPasswordValid) return null;
 
-          // ── Bước 4: Trả về User object cho Auth.js ────────────
-          // Auth.js sẽ truyền object này vào jwt callback ở dưới
-          // KHÔNG đưa password vào đây dù đã hash
           return {
-            id: user._id.toString(), // ObjectId → string
+            id: user._id.toString(),
             email: user.email,
             username: user.username,
             image: user.avatar || null,
           };
         } catch (error) {
           console.error("[AUTH_CREDENTIALS_ERROR]", error);
-          return null; // Lỗi server → coi như đăng nhập thất bại
+          return null;
         }
       },
     }),
-
-    // --- Provider 2: GitHub OAuth ---
-    GitHub({
-      clientId: process.env.AUTH_GITHUB_ID!,
-      clientSecret: process.env.AUTH_GITHUB_SECRET!,
-    }),
-
-    // --- Provider 3: Google OAuth ---
-    Google({
-      clientId: process.env.AUTH_GOOGLE_ID!,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET!,
-    }),
   ],
 
-  // ── CALLBACKS ──────────────────────────────────────────────────────────
+  // Override callbacks để xử lý OAuth + Credentials đầy đủ (có DB access)
   callbacks: {
     // jwt callback: chạy khi tạo/cập nhật JWT token
-    // "user" chỉ có mặt lần đầu tiên sau khi authorize() thành công
     async jwt({ token, user, account }) {
       if (user) {
         if (account?.provider === "credentials") {
-          // ── Credentials login: user.id là MongoDB ObjectId hợp lệ ─────────────────
+          // ── Credentials login: user.id là MongoDB ObjectId hợp lệ ──
           token.id = user.id as string;
           token.username = (user as { username: string }).username;
         } else {
-          // ── OAuth login (Google/GitHub): user.id là provider ID, KHÔNG phải ObjectId ───
-          // Phải tìm hoặc tạo user trong MongoDB, sau đó lưu MongoDB _id vào token
+          // ── OAuth login (Google/GitHub): phải tìm hoặc tạo user trong MongoDB ──
           try {
             await connectDB();
             let dbUser = await User.findOne({ email: user.email });
@@ -109,7 +80,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               const baseUsername = user.email!
                 .split("@")[0]
                 .replace(/[^a-zA-Z0-9_]/g, "_");
-              // Kiểm tra username trùng → thêm suffix nếu cần
               let username = baseUsername;
               const usernameExists = await User.findOne({ username });
               if (usernameExists) {
@@ -119,19 +89,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 email: user.email!,
                 username,
                 avatar: user.image ?? "",
-                // Không có password — OAuth users không cần
               });
             } else if (!dbUser.avatar && user.image) {
-              // Cập nhật avatar nếu chưa có
               dbUser.avatar = user.image;
               await dbUser.save();
             }
 
-            token.id = dbUser._id.toString(); // ← Đây mới là MongoDB ObjectId hợp lệ
+            token.id = dbUser._id.toString();
             token.username = dbUser.username;
           } catch (e) {
             console.error("[JWT_OAUTH_DB_ERROR]", e);
-            // Fallback: giữ lại provider ID (sẽ gây 500 ở routes nhưng không crash auth)
             token.id = user.id as string;
             token.username =
               user.name?.split(" ")[0] ?? user.email?.split("@")[0] ?? "user";
@@ -141,8 +108,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token;
     },
 
-    // session callback: chạy mỗi khi client gọi useSession() hoặc auth()
-    // Lấy dữ liệu từ token (đã được jwt callback ghi) → đưa vào session
+    // session callback: lấy dữ liệu từ token → đưa vào session
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string;
@@ -151,15 +117,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
   },
-
-  // ── SESSION STRATEGY ───────────────────────────────────────────────────
-  session: {
-    strategy: "jwt", // Dùng JWT (stateless) thay vì lưu session vào DB
-    maxAge: 30 * 24 * 60 * 60, // Session hết hạn sau 30 ngày
-  },
-
-  // ── CUSTOM PAGES ───────────────────────────────────────────────────────
-  // pages: {
-  //   signIn: "/login", 
-  // },
 });

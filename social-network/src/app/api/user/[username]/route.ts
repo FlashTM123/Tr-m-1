@@ -44,7 +44,7 @@ export async function GET(
       if (!isOwnProfile) {
         // Kiểm tra trong mảng followers của profile user
         isFollowing = user.followers.some(
-          (id) => id.toString() === session.user.id
+          (id: { toString(): string }) => id.toString() === session.user.id
         );
       }
     }

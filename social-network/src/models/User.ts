@@ -14,6 +14,7 @@ export interface IUser extends Document {
   bio: string;
   followers: Types.ObjectId[];  // Mảng ID những người THEO DÕI mình
   following: Types.ObjectId[];  // Mảng ID những người MÌNH THEO DÕI
+  bookmarks: Types.ObjectId[];  // Mảng ID bài viết đã lưu
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,6 +63,12 @@ const UserSchema = new Schema<IUser>(
       {
         type: Schema.Types.ObjectId,
         ref: "User",
+      },
+    ],
+    bookmarks: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Post",
       },
     ],
   },

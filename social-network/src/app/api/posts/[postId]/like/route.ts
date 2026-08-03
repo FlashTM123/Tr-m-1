@@ -4,6 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { connectDB } from "@/lib/db";
 import Post from "@/models/Post";
+import Notification from "@/models/Notification";
+import { sendSSENotification } from "@/lib/sse";
+import User from "@/models/User";
 import mongoose from "mongoose";
 
 export async function POST(
@@ -28,7 +31,7 @@ export async function POST(
 
     // Kiểm tra đã like chưa
     const isLiked = post.likes.some(
-      (id) => id.toString() === session.user.id
+      (id: { toString(): string }) => id.toString() === session.user.id
     );
 
     if (isLiked) {
@@ -41,6 +44,25 @@ export async function POST(
       await Post.findByIdAndUpdate(postId, {
         $addToSet: { likes: session.user.id },
       });
+
+      // Tạo notification cho chủ bài (không tự thông báo cho chính mình)
+      if (post.user.toString() !== session.user.id) {
+        await Notification.findOneAndUpdate(
+          { recipient: post.user, sender: session.user.id, type: "like", post: postId },
+          { recipient: post.user, sender: session.user.id, type: "like", post: postId, read: false },
+          { upsert: true }
+        );
+
+        // Push SSE notification real-time
+        const sender = await User.findById(session.user.id).select("username avatar").lean();
+        sendSSENotification(post.user.toString(), {
+          type: "like",
+          sender: { _id: session.user.id, username: sender?.username, avatar: sender?.avatar },
+          post: { _id: postId },
+          read: false,
+          createdAt: new Date().toISOString(),
+        });
+      }
     }
 
     // Lấy số like mới nhất sau khi update

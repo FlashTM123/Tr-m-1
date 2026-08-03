@@ -5,6 +5,8 @@ import { auth } from "@/auth";
 import { connectDB } from "@/lib/db";
 import Comment from "@/models/Comment";
 import Post from "@/models/Post";
+import Notification from "@/models/Notification";
+import { sendSSENotification } from "@/lib/sse";
 import mongoose from "mongoose";
 
 // GET: Lấy danh sách bình luận của một bài viết
@@ -65,6 +67,29 @@ export async function POST(
 
     // Populate ngay để trả về đầy đủ thông tin
     await newComment.populate("user", "username avatar");
+
+    // Tạo notification cho chủ bài (không tự thông báo cho chính mình)
+    if (post.user.toString() !== session.user.id) {
+      await Notification.create({
+        recipient: post.user,
+        sender: session.user.id,
+        type: "comment",
+        post: postId,
+      });
+
+      // Push SSE real-time
+      sendSSENotification(post.user.toString(), {
+        type: "comment",
+        sender: {
+          _id: session.user.id,
+          username: (newComment.user as any).username,
+          avatar: (newComment.user as any).avatar,
+        },
+        post: { _id: postId, content: content.trim() },
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
 
     return NextResponse.json(
       { message: "Đã bình luận!", comment: newComment },

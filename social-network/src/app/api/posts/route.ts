@@ -9,31 +9,43 @@ import mongoose from "mongoose";
 
 // ─────────────────────────────────────────────────────────
 // GET /api/posts — Lấy danh sách bài viết (Newsfeed)
-// ─────────────────────────────────────────────────────────
-export async function GET() {
+// Query params: ?feed=following → chỉ bài của người đang follow
+export async function GET(req: NextRequest) {
   try {
     await connectDB();
+    const { searchParams } = new URL(req.url);
+    const feedMode = searchParams.get("feed"); // "following" hoặc null
+
     // Lấy session để biết user hiện tại
     const session = await auth();
     let feedUserIds: string[] = [];
+    let followingIds: string[] = [];
+
     if (session?.user?.id && mongoose.isValidObjectId(session.user.id)) {
       // Tìm thông tin user hiện tại để lấy mảng following
       const currentUser = await User.findById(session.user.id).select("following").lean();
       if (currentUser) {
+        followingIds = currentUser.following.map((id: { toString(): string }) => id.toString());
         // Gộp: ID của chính mình + tất cả người đang follow
-        feedUserIds = [
-          session.user.id,
-          ...currentUser.following.map((id) => id.toString()),
-        ];
+        feedUserIds = [session.user.id, ...followingIds];
       }
     }
-    // Xây dựng query:
-    // - Đã follow ít nhất 1 người: $in lọc bài của người trong feedUserIds
-    // - Chưa follow ai: Discovery mode — hiện tất cả bài viết
-    const followingCount = feedUserIds.length - 1; // trừ chính mình
-    const query = followingCount > 0
-      ? { user: { $in: feedUserIds } }
-      : {};
+
+    let query: Record<string, unknown>;
+
+    if (feedMode === "following") {
+      // Tab "Đang theo dõi": chỉ bài của người đang follow (không bao gồm chính mình)
+      if (followingIds.length === 0) {
+        return NextResponse.json({ posts: [], currentUserFollowing: [] });
+      }
+      query = { user: { $in: followingIds } };
+    } else {
+      // Tab "Dành cho bạn": bài của mình + following; nếu chưa follow ai → discovery mode
+      const followingCount = feedUserIds.length - 1; // trừ chính mình
+      query = followingCount > 0
+        ? { user: { $in: feedUserIds } }
+        : {};
+    }
 
     const posts = await Post.find(query)
       .populate("user", "username avatar")
@@ -43,7 +55,7 @@ export async function GET() {
 
     return NextResponse.json({
       posts,
-      currentUserFollowing: feedUserIds.slice(1),
+      currentUserFollowing: followingIds,
     });
   } catch (error) {
     console.error("[POSTS_GET_ERROR]", error);
