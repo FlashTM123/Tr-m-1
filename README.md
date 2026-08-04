@@ -1,4 +1,4 @@
-﻿# 🌐 Social Network
+# 🌐 Social Network
 
 Dự án Mạng xã hội full-stack được xây dựng trên nền tảng **Next.js 15 App Router**, sử dụng hệ sinh thái công nghệ hiện đại, production-ready.
 
@@ -27,12 +27,14 @@ Dự án Mạng xã hội full-stack được xây dựng trên nền tảng **N
 - 🔐 **Xác thực đa phương thức**: Đăng nhập bằng Email/Password hoặc GitHub/Google OAuth. Middleware bảo vệ private routes.
 - ⚡ **Thông báo Real-time (Server-Sent Events)**:
   - Tự động nhận thông báo khi có ai Thích, Bình luận hoặc Theo dõi bạn không cần F5.
-  - Toast popup hiển thị tức thì toàn ứng dụng kèm badge đếm số thông báo chưa đọc.
+  - Toast popup hiển thị tức thì toàn ứng dụng kèm badge đếm số thông báo chưa đọc đồng bộ chuẩn xác ở Sidebar/Topbar.
+  - Tự động đánh dấu đã đọc khi xem trang `/notifications`.
   - Tự động kết nối lại (Exponential backoff) & Heartbeat giữ kết nối 25s.
 - 📰 **Bảng tin cá nhân hóa (Newsfeed)**: Tab "Dành cho bạn" & Tab "Đang theo dõi", hỗ trợ gợi ý theo dõi thông minh từ DB.
 - 📝 **Đăng bài viết & Media**: Hỗ trợ đăng văn bản kèm nhiều ảnh từ UploadThing Cloud.
+- ✏️ **Chỉnh sửa & Xóa bài viết**: Menu 3 chấm tiện lợi cho chủ bài viết — hỗ trợ sửa nội dung trực tiếp (Inline edit) hoặc xóa bài viết vĩnh viễn với modal xác nhận.
 - ❤️ **Like & Comment (Optimistic UI)**: Phản hồi tức thì không chờ server response.
-- 🔖 **Lưu bài viết (Bookmarks)**: Lưu bài viết yêu thích và xem lại tại trang `/saved` dạng lưới Instagram.
+- 🔖 **Lưu bài viết (Bookmarks)**: Lưu bài viết yêu thích và xem lại tại trang `/saved` dạng lưới Instagram, tự động làm mới dữ liệu realtime.
 - 🔍 **Tìm kiếm người dùng (`/search`)**: Tìm kiếm theo Username với debounce 350ms & thao tác follow trực tiếp.
 - ⚙️ **Cài đặt hồ sơ (`/settings`)**: Đổi avatar (UploadThing), cập nhật Bio & Username.
 - 👥 **Quản lý Bạn bè (`/friends`)**: Danh sách Người theo dõi (Followers) & Đang theo dõi (Following).
@@ -55,11 +57,11 @@ social-network/
 │   │   │   ├── auth/[...nextauth]/route.ts   # Auth.js handler
 │   │   │   ├── auth/register/route.ts        # API Đăng ký
 │   │   │   ├── posts/route.ts                # API Bài viết (GET feed / POST)
-│   │   │   ├── posts/[postId]/route.ts       # API Chi tiết bài viết
+│   │   │   ├── posts/[postId]/route.ts       # API GET / PATCH / DELETE bài viết
 │   │   │   ├── posts/[postId]/like/route.ts  # Toggle like + trigger SSE
 │   │   │   ├── posts/[postId]/comments/route.ts # API Bình luận + trigger SSE
 │   │   │   ├── posts/[postId]/bookmark/route.ts # API Toggle bookmark
-│   │   │   ├── notifications/route.ts        # API Danh sách thông báo
+│   │   │   ├── notifications/route.ts        # API Danh sách thông báo (GET / PATCH read)
 │   │   │   ├── notifications/stream/route.ts # SSE Real-time Stream endpoint
 │   │   │   ├── search/route.ts               # API Tìm kiếm user
 │   │   │   ├── settings/route.ts             # API Cập nhật profile
@@ -87,7 +89,7 @@ social-network/
 │   ├── middleware.ts                         # Edge Route protection
 │   ├── components/
 │   │   ├── CreatePostForm.tsx
-│   │   ├── PostCard.tsx
+│   │   ├── PostCard.tsx                      # Component bài viết (Edit, Delete, Like, Comment, Bookmark)
 │   │   ├── StoryBar.tsx
 │   │   ├── StoryViewer.tsx
 │   │   ├── SSEProvider.tsx                   # Client-side SSE mount point
@@ -99,7 +101,7 @@ social-network/
 │   │   ├── sse.ts                            # SSE Connection Manager (Global Map)
 │   │   └── uploadthing.ts
 │   ├── models/
-│   │   ├── User.ts                           # Added bookmarks array
+│   │   ├── User.ts                           # Schema User (bookmarks, followers, following)
 │   │   ├── Post.ts
 │   │   ├── Comment.ts
 │   │   ├── Story.ts
@@ -171,7 +173,9 @@ pnpm start
 | POST | `/api/auth/register` | Đăng ký tài khoản | ❌ |
 | GET | `/api/posts` | Newsfeed (lọc theo query `?feed=following`) | ❌ |
 | POST | `/api/posts` | Tạo bài viết mới | ✅ |
-| GET/POST | `/api/posts/:id` | Lấy chi tiết bài viết | ❌ |
+| GET | `/api/posts/:id` | Lấy chi tiết 1 bài viết | ❌ |
+| PATCH | `/api/posts/:id` | Chỉnh sửa nội dung bài viết (Chủ bài) | ✅ |
+| DELETE | `/api/posts/:id` | Xóa bài viết & các bình luận liên quan (Chủ bài) | ✅ |
 | POST | `/api/posts/:id/like` | Toggle thích / bỏ thích (trigger SSE) | ✅ |
 | POST | `/api/posts/:id/bookmark` | Toggle lưu bài viết | ✅ |
 | GET/POST | `/api/posts/:id/comments` | Lấy & Tạo bình luận (trigger SSE) | ✅ |
@@ -208,12 +212,13 @@ pnpm lint    # ESLint check
 - [x] Middleware Route Protection & Auth Guard
 - [x] Uploadthing — upload media cloud (ảnh bài viết, avatar, story video/ảnh)
 - [x] Newsfeed cá nhân hóa (lọc theo Following & Discovery mode)
+- [x] Chỉnh sửa & Xóa bài viết (Inline edit & Delete confirmation modal)
 - [x] PostCard (Optimistic like, Bookmark button, Comment count, relative date)
 - [x] Thông báo Real-time bằng Server-Sent Events (SSE) Stream
 - [x] Trang Tìm kiếm (`/search`) với debounce
 - [x] Trang Cài đặt hồ sơ (`/settings`)
 - [x] Trang Chi tiết bài viết (`/post/[postId]`)
-- [x] Trang Bài viết đã lưu (`/saved`)
+- [x] Trang Bài viết đã lưu (`/saved`) với tự động refetch realtime
 - [x] Trang Bạn bè (`/friends`)
 - [x] System Follow / Unfollow (2 chiều)
 - [x] Trang Profile (`/user/[username]`)

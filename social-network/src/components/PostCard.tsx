@@ -3,7 +3,7 @@
 
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
-import { Heart, MessageCircle, Share2, MoreHorizontal, Bookmark } from "lucide-react";
+import { Heart, MessageCircle, Share2, MoreHorizontal, Bookmark, Edit3, Trash2, Check, X, Loader2 } from "lucide-react";
 import FollowButton from "./FollowButton";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -51,6 +51,62 @@ export default function PostCard({ post, currentUserId, currentUserFollowing, bo
   const [isBookmarked, setIsBookmarked] = useState(
     () => bookmarkedPostIds?.includes(post._id) ?? false
   );
+
+  const [showMenu, setShowMenu] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(post.content);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // ── EDIT POST MUTATION ──────────────────────────────────────────────────
+  const { mutate: updatePost, isPending: isUpdating } = useMutation({
+    mutationFn: async (newContent: string) => {
+      const res = await fetch(`/api/posts/${post._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: newContent }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Cập nhật thất bại");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success("Đã cập nhật bài viết ✅");
+      setIsEditing(false);
+      setShowMenu(false);
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["user-posts"] });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+    },
+  });
+
+  // ── DELETE POST MUTATION ────────────────────────────────────────────────
+  const { mutate: deletePost, isPending: isDeleting } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/posts/${post._id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Xóa bài viết thất bại");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast.success("Đã xóa bài viết 🗑️");
+      setShowDeleteConfirm(false);
+      setShowMenu(false);
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["user-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["saved-posts"] });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message);
+    },
+  });
   // Thêm sau khai báo state, trong component PostCard
 
   // ── LIKE MUTATION với Optimistic Updates ────────────────────────────────
@@ -119,6 +175,8 @@ export default function PostCard({ post, currentUserId, currentUserFollowing, bo
     onSuccess: (result) => {
       setIsBookmarked(result.isBookmarked);
       toast.success(result.isBookmarked ? "Đã lưu bài viết 🔖" : "Đã bỏ lưu");
+      queryClient.invalidateQueries({ queryKey: ["saved-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
     },
     onError: () => {
       setIsBookmarked((prev) => !prev); // rollback
@@ -200,16 +258,98 @@ export default function PostCard({ post, currentUserId, currentUserFollowing, bo
           />
         )}
 
-        {/* More options */}
-        <button className="text-white/30 hover:text-white/70 transition-colors p-1 rounded-lg hover:bg-white/5">
-          <MoreHorizontal className="w-4 h-4" />
-        </button>
+        {/* More options dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowMenu((prev) => !prev)}
+            className="text-white/30 hover:text-white/70 transition-colors p-1.5 rounded-lg hover:bg-white/5"
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+
+          {/* Dropdown Menu */}
+          {showMenu && (
+            <div
+              className="absolute right-0 top-8 z-30 w-44 rounded-xl border border-white/10 bg-[#121222] shadow-2xl p-1 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150"
+            >
+              {currentUserId && post.user._id === currentUserId ? (
+                <>
+                  <button
+                    onClick={() => {
+                      setEditContent(post.content);
+                      setIsEditing(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Chỉnh sửa bài viết</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowDeleteConfirm(true);
+                      setShowMenu(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                    <span>Xóa bài viết</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/post/${post._id}`);
+                    toast.success("Đã sao chép liên kết bài viết 📋");
+                    setShowMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Sao chép liên kết</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Nội dung bài viết */}
-      <p className="text-white/90 text-sm leading-relaxed whitespace-pre-wrap mb-4">
-        {post.content}
-      </p>
+      {/* Nội dung bài viết (Chế độ Xem hoặc Chỉnh sửa) */}
+      {isEditing ? (
+        <div className="mb-4 space-y-2">
+          <textarea
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            rows={3}
+            className="w-full bg-white/5 border border-purple-500/40 rounded-xl p-3 text-white text-sm placeholder:text-white/30 outline-none focus:border-purple-500 transition-colors resize-none"
+          />
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => setIsEditing(false)}
+              disabled={isUpdating}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-white/10 text-white/60 hover:text-white text-xs transition-colors"
+            >
+              <X className="w-3.5 h-3.5" /> Hủy
+            </button>
+            <button
+              onClick={() => updatePost(editContent)}
+              disabled={isUpdating || !editContent.trim()}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium transition-colors disabled:opacity-40"
+            >
+              {isUpdating ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Check className="w-3.5 h-3.5" />
+              )}
+              Lưu thay đổi
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="text-white/90 text-sm leading-relaxed whitespace-pre-wrap mb-4">
+          {post.content}
+        </p>
+      )}
 
       {/* Ảnh đính kèm (nếu có) */}
       {(post.images ?? []).length > 0 && (
@@ -349,6 +489,40 @@ export default function PostCard({ post, currentUserId, currentUserFollowing, bo
           {commentsData?.comments.length === 0 && (
             <p className="text-white/30 text-xs text-center py-1">Chưa có bình luận nào</p>
           )}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#121222] p-5 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center text-red-400">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-white text-sm font-semibold">Xóa bài viết?</h3>
+                <p className="text-white/40 text-xs mt-0.5">Hành động này không thể hoàn tác.</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 rounded-xl border border-white/10 text-white/60 hover:text-white text-xs transition-all"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => deletePost()}
+                disabled={isDeleting}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-medium transition-all disabled:opacity-40"
+              >
+                {isDeleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                Xóa vĩnh viễn
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

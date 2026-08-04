@@ -76,3 +76,44 @@ export async function DELETE(
     return NextResponse.json({ message: "Lỗi máy chủ" }, { status: 500 });
   }
 }
+
+// PATCH /api/posts/[postId] — Sửa nội dung bài viết (chỉ chủ bài)
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ postId: string }> }
+) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id || !mongoose.isValidObjectId(session.user.id)) {
+      return NextResponse.json({ message: "Chưa đăng nhập" }, { status: 401 });
+    }
+
+    const { postId } = await params;
+    const { content } = await req.json();
+
+    if (content !== undefined && typeof content !== "string") {
+      return NextResponse.json({ message: "Nội dung không hợp lệ" }, { status: 400 });
+    }
+
+    await connectDB();
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return NextResponse.json({ message: "Bài viết không tồn tại" }, { status: 404 });
+    }
+
+    if (post.user.toString() !== session.user.id) {
+      return NextResponse.json({ message: "Không có quyền sửa bài này" }, { status: 403 });
+    }
+
+    post.content = content?.trim() ?? post.content;
+    await post.save();
+    await post.populate("user", "username avatar");
+
+    return NextResponse.json({ message: "Đã cập nhật bài viết", post });
+  } catch (error) {
+    console.error("[POST_PATCH_ERROR]", error);
+    return NextResponse.json({ message: "Lỗi máy chủ" }, { status: 500 });
+  }
+}
+

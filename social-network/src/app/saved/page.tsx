@@ -21,6 +21,8 @@ export default function SavedPage() {
       return res.json();
     },
     enabled: !!session,
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Unbookmark mutation
@@ -36,6 +38,8 @@ export default function SavedPage() {
         if (!old) return old;
         return { posts: old.posts.filter((p) => p._id !== postId) };
       });
+      queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
       setSelectedPost(null);
     },
     onError: () => toast.error("Thao tác thất bại"),

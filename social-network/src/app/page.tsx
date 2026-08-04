@@ -110,8 +110,8 @@ export default function HomePage() {
       return res.json();
     },
     enabled: !!session,
-    // Không cần polling vì SSE đã handle real-time
-    staleTime: 5 * 60_000,
+    staleTime: 0,
+    refetchOnMount: true,
   });
   const unreadCount = notifData?.unreadCount ?? 0;
 

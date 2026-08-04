@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import { ArrowLeft, Bell, BellOff, Heart, MessageCircle, UserPlus, Loader2 } from "lucide-react";
@@ -46,8 +46,8 @@ export default function NotificationsPage() {
       if (!res.ok) throw new Error("Không thể tải thông báo");
       return res.json();
     },
-    // Không polling — SSE đã handle
-    staleTime: 5 * 60_000,
+    staleTime: 0,
+    refetchOnMount: true,
     enabled: !!session,
   });
 
@@ -57,10 +57,32 @@ export default function NotificationsPage() {
       if (!res.ok) throw new Error("Thất bại");
     },
     onSuccess: () => {
+      // Cập nhật cache cho danh sách thông báo
+      queryClient.setQueryData<{ notifications: NotificationData[]; unreadCount: number }>(
+        ["notifications"],
+        (old) => {
+          if (!old) return old;
+          return {
+            notifications: old.notifications.map((n) => ({ ...n, read: true })),
+            unreadCount: 0,
+          };
+        }
+      );
+      // Cập nhật cache cho badge ở Sidebar/Topbar
+      queryClient.setQueryData<{ unreadCount: number }>(["notifications-count"], {
+        unreadCount: 0,
+      });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      toast.success("Đã đánh dấu tất cả là đã đọc");
+      queryClient.invalidateQueries({ queryKey: ["notifications-count"] });
     },
   });
+
+  // Tự động đánh dấu đã đọc khi vào trang thông báo
+  useEffect(() => {
+    if (data?.unreadCount && data.unreadCount > 0) {
+      markAllRead();
+    }
+  }, [data?.unreadCount, markAllRead]);
 
   const notifications = data?.notifications ?? [];
   const unreadCount = data?.unreadCount ?? 0;
